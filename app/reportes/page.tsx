@@ -29,32 +29,38 @@ interface EtapaResultado {
   completada: boolean
 }
 
-function calcularEtapaImpresion(ticket: Ticket): EtapaResultado {
+function calcularEtapaImpresion(ticket: Ticket): EtapaResultado | null {
+  // Not applicable for solo_laminado
+  if (ticket.tipoServicio === "solo_laminado") return null
+  const estimado = ticket.tiempoImpresion ?? 0
   if (!ticket.inicioImpresion || !ticket.finImpresion) {
-    return { aTiempo: false, tiempoReal: 0, tiempoEstimado: ticket.tiempoImpresion, completada: false }
+    return { aTiempo: false, tiempoReal: 0, tiempoEstimado: estimado, completada: false }
   }
   const inicio = new Date(ticket.inicioImpresion).getTime()
   const fin = new Date(ticket.finImpresion).getTime()
   const tiempoReal = (fin - inicio) / 60000
   return {
-    aTiempo: tiempoReal <= ticket.tiempoImpresion,
+    aTiempo: tiempoReal <= estimado,
     tiempoReal: Math.round(tiempoReal * 10) / 10,
-    tiempoEstimado: ticket.tiempoImpresion,
+    tiempoEstimado: estimado,
     completada: true,
   }
 }
 
-function calcularEtapaLaminado(ticket: Ticket): EtapaResultado {
+function calcularEtapaLaminado(ticket: Ticket): EtapaResultado | null {
+  // Not applicable for solo_impresion
+  if (ticket.tipoServicio === "solo_impresion") return null
+  const estimado = ticket.tiempoLaminado ?? 0
   if (!ticket.inicioLaminado || !ticket.finLaminado) {
-    return { aTiempo: false, tiempoReal: 0, tiempoEstimado: ticket.tiempoLaminado, completada: false }
+    return { aTiempo: false, tiempoReal: 0, tiempoEstimado: estimado, completada: false }
   }
   const inicio = new Date(ticket.inicioLaminado).getTime()
   const fin = new Date(ticket.finLaminado).getTime()
   const tiempoReal = (fin - inicio) / 60000
   return {
-    aTiempo: tiempoReal <= ticket.tiempoLaminado,
+    aTiempo: tiempoReal <= estimado,
     tiempoReal: Math.round(tiempoReal * 10) / 10,
-    tiempoEstimado: ticket.tiempoLaminado,
+    tiempoEstimado: estimado,
     completada: true,
   }
 }
@@ -78,7 +84,14 @@ function formatFecha(iso: string): string {
   })
 }
 
-function EtapaBadge({ resultado }: { resultado: EtapaResultado }) {
+function EtapaBadge({ resultado }: { resultado: EtapaResultado | null }) {
+  if (!resultado) {
+    return (
+      <Badge variant="outline" className="text-xs border-muted-foreground/30 text-muted-foreground">
+        N/A
+      </Badge>
+    )
+  }
   if (!resultado.completada) {
     return (
       <Badge variant="outline" className="text-xs border-muted-foreground/30 text-muted-foreground">
@@ -153,58 +166,62 @@ function TicketReporteCard({ ticket }: { ticket: Ticket }) {
       </div>
 
       <CardContent className="p-4">
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className={cn("grid grid-cols-1 gap-4", impresion && laminado ? "sm:grid-cols-2" : "")}>
           {/* Impresion */}
-          <div className="flex flex-col gap-2 rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Printer className="size-4 text-amber-600" />
-                <span className="text-sm font-semibold text-foreground">Impresion</span>
-              </div>
-              <EtapaBadge resultado={impresion} />
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="size-3.5" />
-                <span>Estimado: {formatMinutos(impresion.tiempoEstimado)}</span>
-              </div>
-              {impresion.completada && (
-                <div className={cn(
-                  "flex items-center gap-1 font-medium",
-                  impresion.aTiempo ? "text-emerald-600" : "text-red-600"
-                )}>
-                  <Clock className="size-3.5" />
-                  <span>Real: {formatMinutos(impresion.tiempoReal)}</span>
+          {impresion && (
+            <div className="flex flex-col gap-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Printer className="size-4 text-amber-600" />
+                  <span className="text-sm font-semibold text-foreground">Impresion</span>
                 </div>
-              )}
+                <EtapaBadge resultado={impresion} />
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="size-3.5" />
+                  <span>Estimado: {formatMinutos(impresion.tiempoEstimado)}</span>
+                </div>
+                {impresion.completada && (
+                  <div className={cn(
+                    "flex items-center gap-1 font-medium",
+                    impresion.aTiempo ? "text-emerald-600" : "text-red-600"
+                  )}>
+                    <Clock className="size-3.5" />
+                    <span>Real: {formatMinutos(impresion.tiempoReal)}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
 
           {/* Laminado */}
-          <div className="flex flex-col gap-2 rounded-lg border p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5">
-                <Layers className="size-4 text-violet-600" />
-                <span className="text-sm font-semibold text-foreground">Laminado</span>
-              </div>
-              <EtapaBadge resultado={laminado} />
-            </div>
-            <div className="flex items-center gap-3 text-sm">
-              <div className="flex items-center gap-1 text-muted-foreground">
-                <Clock className="size-3.5" />
-                <span>Estimado: {formatMinutos(laminado.tiempoEstimado)}</span>
-              </div>
-              {laminado.completada && (
-                <div className={cn(
-                  "flex items-center gap-1 font-medium",
-                  laminado.aTiempo ? "text-emerald-600" : "text-red-600"
-                )}>
-                  <Clock className="size-3.5" />
-                  <span>Real: {formatMinutos(laminado.tiempoReal)}</span>
+          {laminado && (
+            <div className="flex flex-col gap-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5">
+                  <Layers className="size-4 text-violet-600" />
+                  <span className="text-sm font-semibold text-foreground">Laminado</span>
                 </div>
-              )}
+                <EtapaBadge resultado={laminado} />
+              </div>
+              <div className="flex items-center gap-3 text-sm">
+                <div className="flex items-center gap-1 text-muted-foreground">
+                  <Clock className="size-3.5" />
+                  <span>Estimado: {formatMinutos(laminado.tiempoEstimado)}</span>
+                </div>
+                {laminado.completada && (
+                  <div className={cn(
+                    "flex items-center gap-1 font-medium",
+                    laminado.aTiempo ? "text-emerald-600" : "text-red-600"
+                  )}>
+                    <Clock className="size-3.5" />
+                    <span>Real: {formatMinutos(laminado.tiempoReal)}</span>
+                  </div>
+                )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -224,20 +241,23 @@ export default function ReportesPage() {
     const resultados = ticketsConDatos.map((ticket) => {
       const impresion = calcularEtapaImpresion(ticket)
       const laminado = calcularEtapaLaminado(ticket)
-      const impresionOk = impresion.completada && impresion.aTiempo
-      const laminadoOk = laminado.completada && laminado.aTiempo
-      const ambosCompletos = impresion.completada && laminado.completada
-      const todoATiempo = ambosCompletos && impresionOk && laminadoOk
+      const impresionOk = impresion ? impresion.completada && impresion.aTiempo : true
+      const laminadoOk = laminado ? laminado.completada && laminado.aTiempo : true
+      // "all stages complete" means all applicable stages are done
+      const allApplicableComplete =
+        (impresion === null || impresion.completada) &&
+        (laminado === null || laminado.completada)
+      const todoATiempo = allApplicableComplete && impresionOk && laminadoOk
       const tieneFallo =
-        (impresion.completada && !impresion.aTiempo) ||
-        (laminado.completada && !laminado.aTiempo)
+        (impresion?.completada && !impresion.aTiempo) ||
+        (laminado?.completada && !laminado.aTiempo)
 
-      return { ticket, impresion, laminado, impresionOk, laminadoOk, ambosCompletos, todoATiempo, tieneFallo }
+      return { ticket, impresion, laminado, impresionOk, laminadoOk, ambosCompletos: allApplicableComplete, todoATiempo, tieneFallo }
     })
 
     const totalConDatos = resultados.length
-    const impresionesCompletadas = resultados.filter((r) => r.impresion.completada)
-    const laminadosCompletados = resultados.filter((r) => r.laminado.completada)
+    const impresionesCompletadas = resultados.filter((r) => r.impresion?.completada)
+    const laminadosCompletados = resultados.filter((r) => r.laminado?.completada)
     const impresionesATiempo = impresionesCompletadas.filter((r) => r.impresionOk).length
     const laminadosATiempo = laminadosCompletados.filter((r) => r.laminadoOk).length
     const ambosCompletos = resultados.filter((r) => r.ambosCompletos)

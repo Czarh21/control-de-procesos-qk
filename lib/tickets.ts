@@ -6,12 +6,15 @@ export type TicketEstado =
   | "en_laminado"
   | "terminado"
 
+export type TipoServicio = "solo_impresion" | "solo_laminado" | "ambos"
+
 export interface Ticket {
   id: string
   ticketPOS: string
   cliente: string
-  tiempoImpresion: number // minutos
-  tiempoLaminado: number // minutos
+  tipoServicio: TipoServicio
+  tiempoImpresion: number | null // minutos – null when solo_laminado
+  tiempoLaminado: number | null // minutos – null when solo_impresion
   estado: TicketEstado
   creadoEn: string
   inicioImpresion?: string
@@ -31,8 +34,9 @@ function rowToTicket(row: Record<string, unknown>): Ticket {
     id: row.id as string,
     ticketPOS: row.ticket_pos as string,
     cliente: row.cliente as string,
-    tiempoImpresion: row.tiempo_impresion as number,
-    tiempoLaminado: row.tiempo_laminado as number,
+    tipoServicio: (row.tipo_servicio as TipoServicio) ?? "ambos",
+    tiempoImpresion: row.tiempo_impresion != null ? (row.tiempo_impresion as number) : null,
+    tiempoLaminado: row.tiempo_laminado != null ? (row.tiempo_laminado as number) : null,
     estado: row.estado as TicketEstado,
     creadoEn: row.creado_en as string,
     inicioImpresion: (row.inicio_impresion as string) || undefined,
@@ -81,26 +85,41 @@ export async function addTicket(
     Ticket,
     | "ticketPOS"
     | "cliente"
+    | "tipoServicio"
     | "tiempoImpresion"
     | "tiempoLaminado"
     | "realizadoPorImpresion"
+    | "realizadoPorLaminado"
     | "notas"
   >
 ): Promise<Ticket> {
   const supabase = createClient()
   const now = new Date().toISOString()
+  const tipo = ticketData.tipoServicio ?? "ambos"
+
+  // Determine initial state based on service type
+  let estadoInicial: TicketEstado
+  if (tipo === "solo_laminado") {
+    estadoInicial = "en_laminado"
+  } else {
+    estadoInicial = "en_impresion"
+  }
 
   const { data, error } = await supabase
     .from("tickets")
     .insert({
       ticket_pos: ticketData.ticketPOS,
       cliente: ticketData.cliente,
-      tiempo_impresion: ticketData.tiempoImpresion,
-      tiempo_laminado: ticketData.tiempoLaminado,
-      estado: "en_impresion",
+      tipo_servicio: tipo,
+      tiempo_impresion: tipo === "solo_laminado" ? null : ticketData.tiempoImpresion,
+      tiempo_laminado: tipo === "solo_impresion" ? null : ticketData.tiempoLaminado,
+      estado: estadoInicial,
       creado_en: now,
-      inicio_impresion: now,
-      realizado_por_impresion: ticketData.realizadoPorImpresion || null,
+      // Set timestamps based on the service type
+      inicio_impresion: tipo !== "solo_laminado" ? now : null,
+      inicio_laminado: tipo === "solo_laminado" ? now : null,
+      realizado_por_impresion: tipo !== "solo_laminado" ? (ticketData.realizadoPorImpresion || null) : null,
+      realizado_por_laminado: tipo === "solo_laminado" ? (ticketData.realizadoPorLaminado || null) : null,
       notas: ticketData.notas || null,
     })
     .select()
@@ -120,6 +139,7 @@ export async function updateTicket(
   const dbUpdates: Record<string, unknown> = {}
   if (updates.ticketPOS !== undefined) dbUpdates.ticket_pos = updates.ticketPOS
   if (updates.cliente !== undefined) dbUpdates.cliente = updates.cliente
+  if (updates.tipoServicio !== undefined) dbUpdates.tipo_servicio = updates.tipoServicio
   if (updates.tiempoImpresion !== undefined) dbUpdates.tiempo_impresion = updates.tiempoImpresion
   if (updates.tiempoLaminado !== undefined) dbUpdates.tiempo_laminado = updates.tiempoLaminado
   if (updates.estado !== undefined) dbUpdates.estado = updates.estado
@@ -147,10 +167,22 @@ export async function updateTicket(
   return rowToTicket(data)
 }
 
-export async function marcarListoParaLaminado(id: string): Promise<Ticket | null> {
+/**
+ * When printing finishes:
+ * - solo_impresion → terminado (skip laminating entirely)
+ * - ambos → listo_para_laminado (move to laminating queue)
+ */
+export async function terminarImpresion(id: string, tipoServicio: TipoServicio): Promise<Ticket | null> {
+  const now = new Date().toISOString()
+  if (tipoServicio === "solo_impresion") {
+    return updateTicket(id, {
+      estado: "terminado",
+      finImpresion: now,
+    })
+  }
   return updateTicket(id, {
     estado: "listo_para_laminado",
-    finImpresion: new Date().toISOString(),
+    finImpresion: now,
   })
 }
 
@@ -170,6 +202,18 @@ export async function terminarLaminado(id: string): Promise<Ticket | null> {
     estado: "terminado",
     finLaminado: new Date().toISOString(),
   })
+}
+
+/** Helper: determine a human-readable label for the service type */
+export function tipoServicioLabel(tipo: TipoServicio): string {
+  switch (tipo) {
+    case "solo_impresion":
+      return "Solo Impresi\u00f3n"
+    case "solo_laminado":
+      return "Solo Laminado"
+    case "ambos":
+      return "Impresi\u00f3n + Laminado"
+  }
 }
 
 export async function deleteTicket(id: string): Promise<boolean> {

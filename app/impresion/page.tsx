@@ -4,7 +4,7 @@ import { useState } from "react"
 import Link from "next/link"
 import { useTickets, revalidateAllTickets } from "@/hooks/use-tickets"
 import {
-  marcarListoParaLaminado,
+  terminarImpresion,
   updateTicket,
   deleteTicket,
 } from "@/lib/tickets"
@@ -29,6 +29,7 @@ import {
   Trash2,
 } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import type { Ticket, TicketEstado } from "@/lib/tickets"
 
 const FILTER_IMPRESION: TicketEstado[] = ["en_impresion"]
@@ -47,10 +48,14 @@ export default function ImpresionPage() {
     (t) => new Date(t.creadoEn).toDateString() === today
   )
 
-  async function handleEnviarLaminado(id: string, ticketPOS: string) {
-    await marcarListoParaLaminado(id)
+  async function handleTerminarImpresion(ticket: Ticket) {
+    await terminarImpresion(ticket.id, ticket.tipoServicio)
     revalidateAllTickets()
-    toast.success(`Ticket #${ticketPOS} enviado a laminado`)
+    if (ticket.tipoServicio === "solo_impresion") {
+      toast.success(`Ticket #${ticket.ticketPOS} terminado`)
+    } else {
+      toast.success(`Ticket #${ticket.ticketPOS} enviado a laminado`)
+    }
   }
 
   async function handleEditSave(realizadoPor: string, notas: string) {
@@ -133,13 +138,18 @@ export default function ImpresionPage() {
                 actions={
                   <>
                     <Button
-                      onClick={() =>
-                        handleEnviarLaminado(ticket.id, ticket.ticketPOS)
-                      }
-                      className="h-11 flex-1 gap-2 bg-sky-600 text-white hover:bg-sky-700"
+                      onClick={() => handleTerminarImpresion(ticket)}
+                      className={cn(
+                        "h-11 flex-1 gap-2 text-white",
+                        ticket.tipoServicio === "solo_impresion"
+                          ? "bg-emerald-600 hover:bg-emerald-700"
+                          : "bg-sky-600 hover:bg-sky-700"
+                      )}
                     >
                       <Send className="size-4" />
-                      Enviar a Laminado
+                      {ticket.tipoServicio === "solo_impresion"
+                        ? "Marcar Terminado"
+                        : "Enviar a Laminado"}
                     </Button>
                     <Button
                       variant="outline"

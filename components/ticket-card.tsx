@@ -1,6 +1,6 @@
 "use client"
 
-import { type Ticket, type TicketEstado } from "@/lib/tickets"
+import { type Ticket, type TicketEstado, tipoServicioLabel } from "@/lib/tickets"
 import { useElapsedTime, isOverdue } from "@/hooks/use-tickets"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -12,6 +12,8 @@ import {
   FileText,
   AlertTriangle,
   Timer,
+  Printer,
+  Layers,
 } from "lucide-react"
 
 const estadoConfig: Record<
@@ -74,10 +76,10 @@ export function TicketCard({ ticket, actions }: TicketCardProps) {
   const timerStart = config.timerField ? ticket[config.timerField] : undefined
   const elapsed = useElapsedTime(timerStart)
   const estimateField = config.estimateField
-  const estimateMinutes = estimateField ? ticket[estimateField] : 0
+  const estimateMinutes = estimateField ? (ticket[estimateField] ?? 0) : 0
   const overdue =
     config.timerField && config.estimateField
-      ? isOverdue(ticket[config.timerField], ticket[config.estimateField])
+      ? isOverdue(ticket[config.timerField], ticket[config.estimateField] ?? 0)
       : false
 
   // For "listo_para_laminado", show waiting time
@@ -122,16 +124,37 @@ export function TicketCard({ ticket, actions }: TicketCardProps) {
           )}
         </div>
 
+        {/* Service type indicator */}
+        {ticket.tipoServicio !== "ambos" && (
+          <div className="flex items-center gap-1.5">
+            {ticket.tipoServicio === "solo_impresion" ? (
+              <Printer className="size-3.5 text-amber-600" />
+            ) : (
+              <Layers className="size-3.5 text-violet-600" />
+            )}
+            <span className={cn(
+              "text-xs font-semibold",
+              ticket.tipoServicio === "solo_impresion" ? "text-amber-600" : "text-violet-600"
+            )}>
+              {tipoServicioLabel(ticket.tipoServicio)}
+            </span>
+          </div>
+        )}
+
         {/* Info row */}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          <span className="flex items-center gap-1">
-            <Clock className="size-3.5" />
-            Imp: {ticket.tiempoImpresion}min
-          </span>
-          <span className="flex items-center gap-1">
-            <Clock className="size-3.5" />
-            Lam: {ticket.tiempoLaminado}min
-          </span>
+          {ticket.tiempoImpresion != null && (
+            <span className="flex items-center gap-1">
+              <Clock className="size-3.5" />
+              Imp: {ticket.tiempoImpresion}min
+            </span>
+          )}
+          {ticket.tiempoLaminado != null && (
+            <span className="flex items-center gap-1">
+              <Clock className="size-3.5" />
+              Lam: {ticket.tiempoLaminado}min
+            </span>
+          )}
           {ticket.realizadoPorImpresion && (
             <span className="flex items-center gap-1">
               <User className="size-3.5" />
@@ -185,10 +208,12 @@ export function TicketCard({ ticket, actions }: TicketCardProps) {
         )}
 
         {/* Completed info for finished tickets */}
-        {ticket.estado === "terminado" && ticket.finLaminado && (
+        {ticket.estado === "terminado" && (ticket.finLaminado || ticket.finImpresion) && (
           <div className="text-sm text-emerald-700 font-medium">
             Completado:{" "}
-            {new Date(ticket.finLaminado).toLocaleTimeString("es-MX", {
+            {new Date(
+              (ticket.finLaminado || ticket.finImpresion)!
+            ).toLocaleTimeString("es-MX", {
               hour: "2-digit",
               minute: "2-digit",
             })}

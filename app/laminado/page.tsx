@@ -207,7 +207,7 @@ export default function LaminadoPage() {
               No hay tickets pendientes
             </p>
             <p className="text-muted-foreground text-sm">
-              Los tickets enviados desde impresion apareceran aqui automaticamente
+              Los tickets enviados desde impresion o de solo laminado apareceran aqui
             </p>
           </div>
         )}

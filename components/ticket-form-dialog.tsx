@@ -12,10 +12,11 @@ import {
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { addTicket } from "@/lib/tickets"
+import { addTicket, type TipoServicio } from "@/lib/tickets"
 import { revalidateAllTickets } from "@/hooks/use-tickets"
-import { Plus, Loader2 } from "lucide-react"
+import { Plus, Loader2, Printer, Layers, SquareStack } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 
 interface TicketFormDialogProps {
   open: boolean
@@ -25,12 +26,16 @@ interface TicketFormDialogProps {
 export function TicketFormDialog({ open, onOpenChange }: TicketFormDialogProps) {
   const [ticketPOS, setTicketPOS] = useState("")
   const [cliente, setCliente] = useState("")
+  const [tipoServicio, setTipoServicio] = useState<TipoServicio>("ambos")
   const [tiempoImpresion, setTiempoImpresion] = useState("")
   const [tiempoLaminado, setTiempoLaminado] = useState("")
   const [realizadoPor, setRealizadoPor] = useState("")
   const [notas, setNotas] = useState("")
   const [error, setError] = useState("")
   const [isSubmitting, setIsSubmitting] = useState(false)
+
+  const needsImpresion = tipoServicio !== "solo_laminado"
+  const needsLaminado = tipoServicio !== "solo_impresion"
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -44,11 +49,11 @@ export function TicketFormDialog({ open, onOpenChange }: TicketFormDialogProps) 
       setError("El nombre del cliente es obligatorio")
       return
     }
-    if (!tiempoImpresion || Number(tiempoImpresion) <= 0) {
+    if (needsImpresion && (!tiempoImpresion || Number(tiempoImpresion) <= 0)) {
       setError("El tiempo de impresion debe ser mayor a 0")
       return
     }
-    if (!tiempoLaminado || Number(tiempoLaminado) <= 0) {
+    if (needsLaminado && (!tiempoLaminado || Number(tiempoLaminado) <= 0)) {
       setError("El tiempo de laminado debe ser mayor a 0")
       return
     }
@@ -58,9 +63,11 @@ export function TicketFormDialog({ open, onOpenChange }: TicketFormDialogProps) 
       await addTicket({
         ticketPOS: ticketPOS.trim(),
         cliente: cliente.trim(),
-        tiempoImpresion: Number(tiempoImpresion),
-        tiempoLaminado: Number(tiempoLaminado),
+        tipoServicio,
+        tiempoImpresion: needsImpresion ? Number(tiempoImpresion) : null,
+        tiempoLaminado: needsLaminado ? Number(tiempoLaminado) : null,
         realizadoPorImpresion: realizadoPor.trim() || undefined,
+        realizadoPorLaminado: realizadoPor.trim() || undefined,
         notas: notas.trim() || undefined,
       })
       revalidateAllTickets()
@@ -69,6 +76,7 @@ export function TicketFormDialog({ open, onOpenChange }: TicketFormDialogProps) 
       // Reset form
       setTicketPOS("")
       setCliente("")
+      setTipoServicio("ambos")
       setTiempoImpresion("")
       setTiempoLaminado("")
       setRealizadoPor("")
@@ -94,7 +102,7 @@ export function TicketFormDialog({ open, onOpenChange }: TicketFormDialogProps) 
         <DialogHeader>
           <DialogTitle>Nuevo Ticket</DialogTitle>
           <DialogDescription>
-            Registra un nuevo trabajo de impresion
+            Registra un nuevo trabajo de impresion y/o laminado
           </DialogDescription>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
@@ -125,35 +133,67 @@ export function TicketFormDialog({ open, onOpenChange }: TicketFormDialogProps) 
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="tiempoImpresion">
-                Tiempo Impresion (min) *
-              </Label>
-              <Input
-                id="tiempoImpresion"
-                type="number"
-                min="1"
-                placeholder="30"
-                value={tiempoImpresion}
-                onChange={(e) => setTiempoImpresion(e.target.value)}
-                className="h-11 text-base"
-              />
+          {/* Service type selector */}
+          <div className="flex flex-col gap-2">
+            <Label>Tipo de Servicio *</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {([
+                { value: "ambos", label: "Ambos", icon: SquareStack },
+                { value: "solo_impresion", label: "Solo Imprimir", icon: Printer },
+                { value: "solo_laminado", label: "Solo Laminar", icon: Layers },
+              ] as const).map(({ value, label, icon: Icon }) => (
+                <button
+                  key={value}
+                  type="button"
+                  onClick={() => setTipoServicio(value)}
+                  className={cn(
+                    "flex flex-col items-center gap-1.5 rounded-lg border-2 p-3 text-xs font-medium transition-colors",
+                    tipoServicio === value
+                      ? "border-primary bg-primary/5 text-primary"
+                      : "border-muted bg-background text-muted-foreground hover:border-muted-foreground/30"
+                  )}
+                >
+                  <Icon className="size-4" />
+                  {label}
+                </button>
+              ))}
             </div>
-            <div className="flex flex-col gap-2">
-              <Label htmlFor="tiempoLaminado">
-                Tiempo Laminado (min) *
-              </Label>
-              <Input
-                id="tiempoLaminado"
-                type="number"
-                min="1"
-                placeholder="15"
-                value={tiempoLaminado}
-                onChange={(e) => setTiempoLaminado(e.target.value)}
-                className="h-11 text-base"
-              />
-            </div>
+          </div>
+
+          {/* Time fields - shown conditionally based on service type */}
+          <div className={cn("grid gap-3", needsImpresion && needsLaminado ? "grid-cols-2" : "grid-cols-1")}>
+            {needsImpresion && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="tiempoImpresion">
+                  Tiempo Impresion (min) *
+                </Label>
+                <Input
+                  id="tiempoImpresion"
+                  type="number"
+                  min="1"
+                  placeholder="30"
+                  value={tiempoImpresion}
+                  onChange={(e) => setTiempoImpresion(e.target.value)}
+                  className="h-11 text-base"
+                />
+              </div>
+            )}
+            {needsLaminado && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="tiempoLaminado">
+                  Tiempo Laminado (min) *
+                </Label>
+                <Input
+                  id="tiempoLaminado"
+                  type="number"
+                  min="1"
+                  placeholder="15"
+                  value={tiempoLaminado}
+                  onChange={(e) => setTiempoLaminado(e.target.value)}
+                  className="h-11 text-base"
+                />
+              </div>
+            )}
           </div>
 
           <div className="flex flex-col gap-2">
