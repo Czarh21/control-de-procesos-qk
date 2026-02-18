@@ -47,7 +47,7 @@ export default function HomePage() {
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xl font-bold text-foreground">
-                Local de Impresion
+                Local de Impresion / Creacion de Tickets
               </span>
               <span className="text-sm text-muted-foreground">
                 Crear tickets y gestionar impresiones
