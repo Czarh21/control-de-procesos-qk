@@ -18,6 +18,7 @@ import {
   Layers,
   TrendingUp,
   Filter,
+  UserCircle,
 } from "lucide-react"
 
 type FiltroReporte = "todos" | "a_tiempo" | "con_fallos"
@@ -192,6 +193,12 @@ function TicketReporteCard({ ticket }: { ticket: Ticket }) {
                   </div>
                 )}
               </div>
+              {ticket.realizadoPorImpresion && (
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground border-t pt-2 mt-1">
+                  <UserCircle className="size-3.5 shrink-0" />
+                  <span className="font-medium text-foreground">{ticket.realizadoPorImpresion}</span>
+                </div>
+              )}
             </div>
           )}
 
@@ -220,6 +227,12 @@ function TicketReporteCard({ ticket }: { ticket: Ticket }) {
                   </div>
                 )}
               </div>
+              {ticket.realizadoPorLaminado && (
+                <div className="flex items-center gap-1.5 text-sm text-muted-foreground border-t pt-2 mt-1">
+                  <UserCircle className="size-3.5 shrink-0" />
+                  <span className="font-medium text-foreground">{ticket.realizadoPorLaminado}</span>
+                </div>
+              )}
             </div>
           )}
         </div>
