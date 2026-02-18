@@ -284,12 +284,6 @@ export default function ConsultaPage() {
       {/* Header */}
       <header className="sticky top-0 z-10 border-b bg-emerald-50 px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center gap-3">
-          <Link href="/">
-            <Button variant="ghost" size="icon" className="size-9">
-              <ArrowLeft className="size-4" />
-              <span className="sr-only">Volver al inicio</span>
-            </Button>
-          </Link>
           <h1 className="text-xl font-bold text-foreground">
             Consultar Pedido
           </h1>
