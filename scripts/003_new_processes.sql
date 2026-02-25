@@ -1,70 +1,78 @@
--- Migration: Add new process types (Corte, Foil, Impresion 2, Acabados)
+-- Full tickets table with all processes
+CREATE TABLE IF NOT EXISTS public.tickets (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  ticket_pos TEXT NOT NULL,
+  cliente TEXT NOT NULL,
 
--- 1. Add new columns for extended processes
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS con_acabados BOOLEAN DEFAULT false;
+  tipo_servicio TEXT NOT NULL DEFAULT 'imp_lam'
+    CHECK (tipo_servicio IN (
+      'solo_impresion',
+      'solo_laminado',
+      'imp_lam',
+      'imp_lam_corte',
+      'imp_lam_foil',
+      'imp_lam_foil_corte'
+    )),
 
--- Impresion 2da pasada
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS tiempo_impresion_2 INTEGER;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS inicio_impresion_2 TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS fin_impresion_2 TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS realizado_por_impresion_2 TEXT;
+  con_acabados BOOLEAN NOT NULL DEFAULT false,
 
--- Foil (en local de laminado)
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS tiempo_foil INTEGER;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS inicio_foil TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS fin_foil TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS realizado_por_foil TEXT;
+  estado TEXT NOT NULL DEFAULT 'en_impresion'
+    CHECK (estado IN (
+      'en_impresion',
+      'listo_para_laminado',
+      'en_laminado',
+      'listo_para_impresion_2',
+      'en_impresion_2',
+      'listo_para_foil',
+      'en_foil',
+      'listo_para_corte',
+      'en_corte',
+      'listo_para_acabados',
+      'en_acabados',
+      'terminado'
+    )),
 
--- Corte
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS tiempo_corte INTEGER;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS inicio_corte TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS fin_corte TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS realizado_por_corte TEXT;
+  tiempo_impresion INTEGER,
+  tiempo_laminado INTEGER,
+  tiempo_impresion_2 INTEGER,
+  tiempo_foil INTEGER,
+  tiempo_corte INTEGER,
+  tiempo_acabados INTEGER,
 
--- Acabados
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS tiempo_acabados INTEGER;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS inicio_acabados TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS fin_acabados TIMESTAMPTZ;
-ALTER TABLE public.tickets ADD COLUMN IF NOT EXISTS realizado_por_acabados TEXT;
+  creado_en TIMESTAMPTZ NOT NULL DEFAULT now(),
 
--- 2. Migrate existing 'ambos' -> 'imp_lam'
-UPDATE public.tickets SET tipo_servicio = 'imp_lam' WHERE tipo_servicio = 'ambos';
+  inicio_impresion TIMESTAMPTZ,
+  fin_impresion TIMESTAMPTZ,
+  inicio_laminado TIMESTAMPTZ,
+  fin_laminado TIMESTAMPTZ,
+  inicio_impresion_2 TIMESTAMPTZ,
+  fin_impresion_2 TIMESTAMPTZ,
+  inicio_foil TIMESTAMPTZ,
+  fin_foil TIMESTAMPTZ,
+  inicio_corte TIMESTAMPTZ,
+  fin_corte TIMESTAMPTZ,
+  inicio_acabados TIMESTAMPTZ,
+  fin_acabados TIMESTAMPTZ,
 
--- 3. Drop ALL check constraints on tipo_servicio and estado, then re-add
--- We need to find and drop all check constraints first
-DO $$
-DECLARE
-  r RECORD;
-BEGIN
-  FOR r IN (
-    SELECT con.conname
-    FROM pg_constraint con
-    JOIN pg_class rel ON rel.oid = con.conrelid
-    JOIN pg_namespace nsp ON nsp.oid = rel.relnamespace
-    WHERE rel.relname = 'tickets'
-      AND nsp.nspname = 'public'
-      AND con.contype = 'c'
-  ) LOOP
-    EXECUTE 'ALTER TABLE public.tickets DROP CONSTRAINT ' || quote_ident(r.conname);
-  END LOOP;
-END $$;
+  realizado_por_impresion TEXT,
+  realizado_por_laminado TEXT,
+  realizado_por_impresion_2 TEXT,
+  realizado_por_foil TEXT,
+  realizado_por_corte TEXT,
+  realizado_por_acabados TEXT,
 
--- 4. Re-add constraints with expanded values
-ALTER TABLE public.tickets ADD CONSTRAINT tickets_tipo_servicio_check
-  CHECK (tipo_servicio IN (
-    'solo_impresion', 'solo_laminado', 'imp_lam',
-    'imp_lam_corte', 'imp_lam_imp_foil', 'imp_lam_imp_foil_corte'
-  ));
+  notas TEXT
+);
 
-ALTER TABLE public.tickets ADD CONSTRAINT tickets_estado_check
-  CHECK (estado IN (
-    'en_impresion', 'listo_para_laminado', 'en_laminado',
-    'listo_para_impresion_2', 'en_impresion_2',
-    'listo_para_foil', 'en_foil',
-    'listo_para_corte', 'en_corte',
-    'listo_para_acabados', 'en_acabados',
-    'terminado'
-  ));
+ALTER TABLE public.tickets ENABLE ROW LEVEL SECURITY;
 
--- 5. Indexes for new columns
+CREATE POLICY "allow_select_all" ON public.tickets FOR SELECT USING (true);
+CREATE POLICY "allow_insert_all" ON public.tickets FOR INSERT WITH CHECK (true);
+CREATE POLICY "allow_update_all" ON public.tickets FOR UPDATE USING (true);
+CREATE POLICY "allow_delete_all" ON public.tickets FOR DELETE USING (true);
+
+CREATE INDEX IF NOT EXISTS idx_tickets_estado ON public.tickets (estado);
+CREATE INDEX IF NOT EXISTS idx_tickets_creado_en ON public.tickets (creado_en DESC);
+CREATE INDEX IF NOT EXISTS idx_tickets_ticket_pos ON public.tickets (ticket_pos);
+CREATE INDEX IF NOT EXISTS idx_tickets_tipo_servicio ON public.tickets (tipo_servicio);
 CREATE INDEX IF NOT EXISTS idx_tickets_con_acabados ON public.tickets (con_acabados);
