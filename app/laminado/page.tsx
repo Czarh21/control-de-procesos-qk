@@ -4,8 +4,8 @@ import { useState } from "react"
 import Link from "next/link"
 import { useTickets, revalidateAllTickets } from "@/hooks/use-tickets"
 import {
-  iniciarLaminado,
-  terminarLaminado,
+  iniciarPaso,
+  terminarPaso,
   updateTicket,
 } from "@/lib/tickets"
 import { TicketCard } from "@/components/ticket-card"
@@ -24,66 +24,160 @@ import {
   CheckCircle2,
   Pencil,
   ChevronDown,
+  Send,
+  Sparkles,
 } from "lucide-react"
 import { toast } from "sonner"
+import { cn } from "@/lib/utils"
 import type { Ticket, TicketEstado } from "@/lib/tickets"
 
-const FILTER_PENDIENTES: TicketEstado[] = ["listo_para_laminado"]
-const FILTER_EN_PROCESO: TicketEstado[] = ["en_laminado"]
-const FILTER_TERMINADOS: TicketEstado[] = ["terminado"]
+// Laminado normal
+const FILTER_LISTO_LAM: TicketEstado[] = ["listo_para_laminado"]
+const FILTER_EN_LAM: TicketEstado[] = ["en_laminado"]
+
+// Foil
+const FILTER_LISTO_FOIL: TicketEstado[] = ["listo_para_foil"]
+const FILTER_EN_FOIL: TicketEstado[] = ["en_foil"]
 
 export default function LaminadoPage() {
-  const { tickets: pendientes } = useTickets(FILTER_PENDIENTES)
-  const { tickets: enProceso } = useTickets(FILTER_EN_PROCESO)
-  const { tickets: terminados } = useTickets(FILTER_TERMINADOS)
+  const { tickets: listoLam } = useTickets(FILTER_LISTO_LAM)
+  const { tickets: enLam } = useTickets(FILTER_EN_LAM)
+  const { tickets: listoFoil } = useTickets(FILTER_LISTO_FOIL)
+  const { tickets: enFoil } = useTickets(FILTER_EN_FOIL)
   const [editTicket, setEditTicket] = useState<Ticket | null>(null)
-  const [operadorInputs, setOperadorInputs] = useState<
-    Record<string, string>
-  >({})
+  const [operadorInputs, setOperadorInputs] = useState<Record<string, string>>({})
   const [historialOpen, setHistorialOpen] = useState(false)
 
-  // Only show today's history
-  const today = new Date().toDateString()
-  const terminadosHoy = terminados.filter(
-    (t) => new Date(t.creadoEn).toDateString() === today
-  )
+  const totalLam = listoLam.length + enLam.length
+  const totalFoil = listoFoil.length + enFoil.length
+  const totalCount = totalLam + totalFoil
 
-  async function handleIniciarLaminado(id: string, ticketPOS: string) {
-    const operador = operadorInputs[id]?.trim() || ""
-    await iniciarLaminado(id, operador || undefined)
+  async function handleIniciar(ticket: Ticket) {
+    const operador = operadorInputs[ticket.id]?.trim() || ""
+    await iniciarPaso(ticket, operador || undefined)
     revalidateAllTickets()
-    toast.success(`Ticket #${ticketPOS} - Laminado iniciado`)
-    // Clean operator input
+    const label = ticket.estado === "listo_para_foil" ? "Foil" : "Laminado"
+    toast.success(`Ticket #${ticket.ticketPOS} - ${label} iniciado`)
     setOperadorInputs((prev) => {
       const next = { ...prev }
-      delete next[id]
+      delete next[ticket.id]
       return next
     })
   }
 
-  async function handleTerminar(id: string, ticketPOS: string) {
-    await terminarLaminado(id)
+  async function handleTerminar(ticket: Ticket) {
+    await terminarPaso(ticket)
     revalidateAllTickets()
-    toast.success(`Ticket #${ticketPOS} - Terminado`)
+    const isFoil = ticket.estado === "en_foil"
+    toast.success(`Ticket #${ticket.ticketPOS} - ${isFoil ? "Foil" : "Laminado"} terminado`)
   }
 
   async function handleEditSave(realizadoPor: string, notas: string) {
     if (!editTicket) return
-    await updateTicket(editTicket.id, {
-      realizadoPorLaminado: realizadoPor || undefined,
-      notas: notas || undefined,
-    })
+    const updates: Partial<Omit<Ticket, "id">> = { notas: notas || undefined }
+    if (editTicket.estado === "en_foil" || editTicket.estado === "listo_para_foil") {
+      updates.realizadoPorFoil = realizadoPor || undefined
+    } else {
+      updates.realizadoPorLaminado = realizadoPor || undefined
+    }
+    await updateTicket(editTicket.id, updates)
     revalidateAllTickets()
     toast.success(`Ticket #${editTicket.ticketPOS} actualizado`)
     setEditTicket(null)
   }
 
-  const totalPendientes = pendientes.length + enProceso.length
+  function renderSection(
+    title: string,
+    titleColor: string,
+    tickets: Ticket[],
+    type: "listo" | "en_proceso"
+  ) {
+    if (tickets.length === 0) return null
+
+    return (
+      <section className="flex flex-col gap-3">
+        <h2 className={cn("text-sm font-semibold uppercase tracking-wide", titleColor)}>
+          {title} ({tickets.length})
+        </h2>
+        {tickets.map((ticket) => (
+          <TicketCard
+            key={ticket.id}
+            ticket={ticket}
+            showProcessSteps
+            actions={
+              type === "listo" ? (
+                <div className="flex w-full flex-col gap-2">
+                  <Input
+                    placeholder="Operador (opcional)"
+                    value={operadorInputs[ticket.id] || ""}
+                    onChange={(e) =>
+                      setOperadorInputs((prev) => ({
+                        ...prev,
+                        [ticket.id]: e.target.value,
+                      }))
+                    }
+                    className="h-11 text-base"
+                  />
+                  <Button
+                    onClick={() => handleIniciar(ticket)}
+                    className={cn(
+                      "h-12 w-full gap-2 text-white text-base",
+                      ticket.estado === "listo_para_foil"
+                        ? "bg-pink-600 hover:bg-pink-700"
+                        : "bg-purple-600 hover:bg-purple-700"
+                    )}
+                  >
+                    <Play className="size-5" />
+                    {ticket.estado === "listo_para_foil"
+                      ? "Iniciar Foil"
+                      : "Iniciar Laminado"}
+                  </Button>
+                </div>
+              ) : (
+                <>
+                  <Button
+                    onClick={() => handleTerminar(ticket)}
+                    className={cn(
+                      "h-12 flex-1 gap-2 text-white text-base",
+                      ticket.estado === "en_foil"
+                        ? "bg-pink-600 hover:bg-pink-700"
+                        : "bg-green-600 hover:bg-green-700"
+                    )}
+                  >
+                    {ticket.estado === "en_foil" ? (
+                      <>
+                        <Sparkles className="size-5" />
+                        Terminar Foil
+                      </>
+                    ) : (
+                      <>
+                        <CheckCircle2 className="size-5" />
+                        Terminar Laminado
+                      </>
+                    )}
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    className="size-12"
+                    onClick={() => setEditTicket(ticket)}
+                  >
+                    <Pencil className="size-4" />
+                    <span className="sr-only">Editar</span>
+                  </Button>
+                </>
+              )
+            }
+          />
+        ))}
+      </section>
+    )
+  }
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-violet-50 px-4 py-3">
+      <header className="sticky top-0 z-10 border-b bg-purple-50 px-4 py-3">
         <div className="mx-auto flex max-w-2xl items-center justify-between">
           <div className="flex items-center gap-3">
             <Link href="/">
@@ -94,25 +188,22 @@ export default function LaminadoPage() {
             </Link>
             <div className="flex items-center gap-2">
               <h1 className="text-xl font-bold text-foreground">Laminado</h1>
-              {totalPendientes > 0 && (
-                <Badge className="bg-violet-500 text-white border-none text-sm">
-                  {totalPendientes}
+              {totalCount > 0 && (
+                <Badge className="bg-purple-500 text-white border-none text-sm">
+                  {totalCount}
                 </Badge>
               )}
             </div>
           </div>
-          <div className="flex items-center gap-2 text-sm text-muted-foreground">
-            {pendientes.length > 0 && (
-              <Badge variant="outline" className="border-sky-400 text-sky-700">
-                {pendientes.length} por recibir
+          <div className="flex items-center gap-2 text-sm">
+            {totalLam > 0 && (
+              <Badge variant="outline" className="border-purple-400 text-purple-700">
+                {totalLam} laminado
               </Badge>
             )}
-            {enProceso.length > 0 && (
-              <Badge
-                variant="outline"
-                className="border-violet-400 text-violet-700"
-              >
-                {enProceso.length} en proceso
+            {totalFoil > 0 && (
+              <Badge variant="outline" className="border-pink-400 text-pink-700">
+                {totalFoil} foil
               </Badge>
             )}
           </div>
@@ -121,127 +212,51 @@ export default function LaminadoPage() {
 
       {/* Content */}
       <main className="mx-auto flex w-full max-w-2xl flex-1 flex-col gap-6 p-4">
-        {/* Pending tickets */}
-        {pendientes.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-sky-700">
-              Pendientes por recibir ({pendientes.length})
-            </h2>
-            {pendientes.map((ticket) => (
-              <TicketCard
-                key={ticket.id}
-                ticket={ticket}
-                actions={
-                  <div className="flex w-full flex-col gap-2">
-                    <Input
-                      placeholder="Quien lo lamina (opcional)"
-                      value={operadorInputs[ticket.id] || ""}
-                      onChange={(e) =>
-                        setOperadorInputs((prev) => ({
-                          ...prev,
-                          [ticket.id]: e.target.value,
-                        }))
-                      }
-                      className="h-11 text-base"
-                    />
-                    <Button
-                      onClick={() =>
-                        handleIniciarLaminado(ticket.id, ticket.ticketPOS)
-                      }
-                      className="h-12 w-full gap-2 bg-violet-600 text-white hover:bg-violet-700 text-base"
-                    >
-                      <Play className="size-5" />
-                      Iniciar Laminado
-                    </Button>
-                  </div>
-                }
-              />
-            ))}
-          </section>
-        )}
+        {/* Laminado sections */}
+        {renderSection("Pendientes Laminado", "text-amber-700", listoLam, "listo")}
+        {renderSection("En Laminado", "text-purple-700", enLam, "en_proceso")}
 
-        {/* In progress */}
-        {enProceso.length > 0 && (
-          <section className="flex flex-col gap-3">
-            <h2 className="text-sm font-semibold uppercase tracking-wide text-violet-700">
-              En proceso ({enProceso.length})
-            </h2>
-            {enProceso.map((ticket) => (
-              <TicketCard
-                key={ticket.id}
-                ticket={ticket}
-                actions={
-                  <>
-                    <Button
-                      onClick={() =>
-                        handleTerminar(ticket.id, ticket.ticketPOS)
-                      }
-                      className="h-12 flex-1 gap-2 bg-emerald-600 text-white hover:bg-emerald-700 text-base"
-                    >
-                      <CheckCircle2 className="size-5" />
-                      Terminado
-                    </Button>
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      className="size-12"
-                      onClick={() => setEditTicket(ticket)}
-                    >
-                      <Pencil className="size-4" />
-                      <span className="sr-only">Editar ticket</span>
-                    </Button>
-                  </>
-                }
-              />
-            ))}
-          </section>
-        )}
+        {/* Foil sections */}
+        {renderSection("Pendientes Foil", "text-amber-700", listoFoil, "listo")}
+        {renderSection("En Foil", "text-pink-700", enFoil, "en_proceso")}
 
         {/* Empty state */}
-        {pendientes.length === 0 && enProceso.length === 0 && (
+        {totalCount === 0 && (
           <div className="flex flex-1 flex-col items-center justify-center gap-3 py-16 text-center">
             <div className="size-16 rounded-full bg-muted flex items-center justify-center">
               <CheckCircle2 className="size-8 text-muted-foreground" />
             </div>
-            <p className="text-muted-foreground text-lg">
-              No hay tickets pendientes
-            </p>
+            <p className="text-muted-foreground text-lg">No hay tickets pendientes</p>
             <p className="text-muted-foreground text-sm">
-              Los tickets enviados desde impresion o de solo laminado apareceran aqui
+              Los tickets enviados desde impresion apareceran aqui
             </p>
           </div>
         )}
 
         {/* History */}
-        {terminadosHoy.length > 0 && (
-          <Collapsible open={historialOpen} onOpenChange={setHistorialOpen}>
-            <CollapsibleTrigger asChild>
-              <button className="flex w-full items-center justify-between rounded-lg border bg-muted/50 px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted">
-                <span>
-                  Terminados hoy ({terminadosHoy.length})
-                </span>
-                <ChevronDown
-                  className={`size-4 transition-transform ${historialOpen ? "rotate-180" : ""}`}
-                />
-              </button>
-            </CollapsibleTrigger>
-            <CollapsibleContent className="flex flex-col gap-3 pt-3">
-              {terminadosHoy.map((ticket) => (
-                <TicketCard key={ticket.id} ticket={ticket} />
-              ))}
-            </CollapsibleContent>
-          </Collapsible>
-        )}
+        <Collapsible open={historialOpen} onOpenChange={setHistorialOpen}>
+          <CollapsibleTrigger asChild>
+            <button className="flex w-full items-center justify-between rounded-lg border bg-muted/50 px-4 py-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-muted">
+              <span>Historial</span>
+              <ChevronDown className={cn("size-4 transition-transform", historialOpen && "rotate-180")} />
+            </button>
+          </CollapsibleTrigger>
+          <CollapsibleContent className="pt-3 text-sm text-muted-foreground text-center">
+            Consulta el historial completo en la seccion de Consulta.
+          </CollapsibleContent>
+        </Collapsible>
       </main>
 
       {/* Edit dialog */}
       {editTicket && (
         <EditTicketDialog
           open={!!editTicket}
-          onOpenChange={(open) => {
-            if (!open) setEditTicket(null)
-          }}
-          initialRealizadoPor={editTicket.realizadoPorLaminado || ""}
+          onOpenChange={(open) => { if (!open) setEditTicket(null) }}
+          initialRealizadoPor={
+            editTicket.estado === "en_foil" || editTicket.estado === "listo_para_foil"
+              ? editTicket.realizadoPorFoil || ""
+              : editTicket.realizadoPorLaminado || ""
+          }
           initialNotas={editTicket.notas || ""}
           title={`Editar Ticket #${editTicket.ticketPOS}`}
           onSave={handleEditSave}

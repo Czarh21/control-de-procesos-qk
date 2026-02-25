@@ -1,11 +1,11 @@
 import Link from "next/link"
 import Image from "next/image"
-import { Printer, Layers, Search, BarChart3 } from "lucide-react"
+import { Printer, Layers, Search, BarChart3, Scissors, Star } from "lucide-react"
 
 export default function HomePage() {
   return (
     <main className="flex min-h-svh flex-col items-center justify-center bg-background px-4">
-      <div className="flex w-full max-w-lg flex-col items-center gap-8">
+      <div className="flex w-full max-w-lg flex-col items-center gap-8 py-8">
         {/* Logos */}
         <div className="flex items-center justify-center gap-6">
           <Image
@@ -40,14 +40,14 @@ export default function HomePage() {
         <div className="flex w-full flex-col gap-4">
           <Link
             href="/impresion"
-            className="group flex items-center gap-4 rounded-xl border-2 border-amber-300 bg-amber-50 p-6 transition-all hover:border-amber-500 hover:bg-amber-100 hover:shadow-lg active:scale-[0.98]"
+            className="group flex items-center gap-4 rounded-xl border-2 border-blue-300 bg-blue-50 p-5 transition-all hover:border-blue-500 hover:bg-blue-100 hover:shadow-lg active:scale-[0.98]"
           >
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-amber-500">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-blue-500">
               <Printer className="size-7 text-white" />
             </div>
             <div className="flex flex-col gap-1">
               <span className="text-xl font-bold text-foreground">
-                Local de Impresion / Creacion de Tickets
+                Local de Impresion
               </span>
               <span className="text-sm text-muted-foreground">
                 Crear tickets y gestionar impresiones
@@ -57,9 +57,9 @@ export default function HomePage() {
 
           <Link
             href="/laminado"
-            className="group flex items-center gap-4 rounded-xl border-2 border-violet-300 bg-violet-50 p-6 transition-all hover:border-violet-500 hover:bg-violet-100 hover:shadow-lg active:scale-[0.98]"
+            className="group flex items-center gap-4 rounded-xl border-2 border-purple-300 bg-purple-50 p-5 transition-all hover:border-purple-500 hover:bg-purple-100 hover:shadow-lg active:scale-[0.98]"
           >
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-violet-500">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-purple-500">
               <Layers className="size-7 text-white" />
             </div>
             <div className="flex flex-col gap-1">
@@ -67,16 +67,50 @@ export default function HomePage() {
                 Local de Laminado
               </span>
               <span className="text-sm text-muted-foreground">
-                Recibir trabajos y gestionar laminado
+                Recibir trabajos, laminado y foil
+              </span>
+            </div>
+          </Link>
+
+          <Link
+            href="/corte"
+            className="group flex items-center gap-4 rounded-xl border-2 border-orange-300 bg-orange-50 p-5 transition-all hover:border-orange-500 hover:bg-orange-100 hover:shadow-lg active:scale-[0.98]"
+          >
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-orange-500">
+              <Scissors className="size-7 text-white" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xl font-bold text-foreground">
+                Local de Corte
+              </span>
+              <span className="text-sm text-muted-foreground">
+                Recibir y gestionar cortes
+              </span>
+            </div>
+          </Link>
+
+          <Link
+            href="/acabados"
+            className="group flex items-center gap-4 rounded-xl border-2 border-teal-300 bg-teal-50 p-5 transition-all hover:border-teal-500 hover:bg-teal-100 hover:shadow-lg active:scale-[0.98]"
+          >
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-teal-500">
+              <Star className="size-7 text-white" />
+            </div>
+            <div className="flex flex-col gap-1">
+              <span className="text-xl font-bold text-foreground">
+                Local de Acabados
+              </span>
+              <span className="text-sm text-muted-foreground">
+                Ultimo paso del proceso (opcional)
               </span>
             </div>
           </Link>
 
           <Link
             href="/reportes"
-            className="group flex items-center gap-4 rounded-xl border-2 border-blue-300 bg-blue-50 p-6 transition-all hover:border-blue-500 hover:bg-blue-100 hover:shadow-lg active:scale-[0.98]"
+            className="group flex items-center gap-4 rounded-xl border-2 border-indigo-300 bg-indigo-50 p-5 transition-all hover:border-indigo-500 hover:bg-indigo-100 hover:shadow-lg active:scale-[0.98]"
           >
-            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-blue-500">
+            <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-indigo-500">
               <BarChart3 className="size-7 text-white" />
             </div>
             <div className="flex flex-col gap-1">
@@ -100,9 +134,9 @@ export default function HomePage() {
         {/* Client lookup */}
         <Link
           href="/consulta"
-          className="group flex w-full items-center gap-4 rounded-xl border-2 border-emerald-300 bg-emerald-50 p-6 transition-all hover:border-emerald-500 hover:bg-emerald-100 hover:shadow-lg active:scale-[0.98]"
+          className="group flex w-full items-center gap-4 rounded-xl border-2 border-green-300 bg-green-50 p-5 transition-all hover:border-green-500 hover:bg-green-100 hover:shadow-lg active:scale-[0.98]"
         >
-          <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-emerald-500">
+          <div className="flex size-14 shrink-0 items-center justify-center rounded-xl bg-green-500">
             <Search className="size-7 text-white" />
           </div>
           <div className="flex flex-col gap-1">
