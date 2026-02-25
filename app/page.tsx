@@ -13,8 +13,7 @@ export default function HomePage() {
             alt="SH Artes Graficas"
             width={100}
             height={100}
-            className="object-contain"
-            style={{ width: 'auto', height: 'auto' }}
+            className="h-16 w-auto object-contain"
             priority
           />
           <Image
@@ -22,8 +21,7 @@ export default function HomePage() {
             alt="MyApp"
             width={90}
             height={90}
-            className="object-contain"
-            style={{ width: 'auto', height: 'auto' }}
+            className="h-14 w-auto object-contain"
             priority
           />
         </div>
