@@ -14,6 +14,7 @@ export default function HomePage() {
             width={100}
             height={100}
             className="object-contain"
+            style={{ width: 'auto', height: 'auto' }}
             priority
           />
           <Image
@@ -22,6 +23,7 @@ export default function HomePage() {
             width={90}
             height={90}
             className="object-contain"
+            style={{ width: 'auto', height: 'auto' }}
             priority
           />
         </div>
