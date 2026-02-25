@@ -7,63 +7,46 @@ import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { cn } from "@/lib/utils"
-import type { Ticket } from "@/lib/tickets"
+import {
+  type Ticket,
+  getTicketProcessSteps,
+  type ProcessStep,
+  tipoServicioLabel,
+} from "@/lib/tickets"
 import {
   ArrowLeft,
   BarChart3,
   CheckCircle2,
   XCircle,
   Clock,
-  Printer,
-  Layers,
   TrendingUp,
   Filter,
   UserCircle,
+  Printer,
+  Layers,
+  Scissors,
+  Sparkles,
+  Star,
 } from "lucide-react"
 
 type FiltroReporte = "todos" | "a_tiempo" | "con_fallos"
 
-interface EtapaResultado {
-  aTiempo: boolean
-  tiempoReal: number
-  tiempoEstimado: number
-  completada: boolean
+const stepIconMap: Record<string, React.ElementType> = {
+  impresion: Printer,
+  laminado: Layers,
+  impresion_2: Printer,
+  foil: Sparkles,
+  corte: Scissors,
+  acabados: Star,
 }
 
-function calcularEtapaImpresion(ticket: Ticket): EtapaResultado | null {
-  // Not applicable for solo_laminado
-  if (ticket.tipoServicio === "solo_laminado") return null
-  const estimado = ticket.tiempoImpresion ?? 0
-  if (!ticket.inicioImpresion || !ticket.finImpresion) {
-    return { aTiempo: false, tiempoReal: 0, tiempoEstimado: estimado, completada: false }
-  }
-  const inicio = new Date(ticket.inicioImpresion).getTime()
-  const fin = new Date(ticket.finImpresion).getTime()
-  const tiempoReal = (fin - inicio) / 60000
-  return {
-    aTiempo: tiempoReal <= estimado,
-    tiempoReal: Math.round(tiempoReal * 10) / 10,
-    tiempoEstimado: estimado,
-    completada: true,
-  }
-}
-
-function calcularEtapaLaminado(ticket: Ticket): EtapaResultado | null {
-  // Not applicable for solo_impresion
-  if (ticket.tipoServicio === "solo_impresion") return null
-  const estimado = ticket.tiempoLaminado ?? 0
-  if (!ticket.inicioLaminado || !ticket.finLaminado) {
-    return { aTiempo: false, tiempoReal: 0, tiempoEstimado: estimado, completada: false }
-  }
-  const inicio = new Date(ticket.inicioLaminado).getTime()
-  const fin = new Date(ticket.finLaminado).getTime()
-  const tiempoReal = (fin - inicio) / 60000
-  return {
-    aTiempo: tiempoReal <= estimado,
-    tiempoReal: Math.round(tiempoReal * 10) / 10,
-    tiempoEstimado: estimado,
-    completada: true,
-  }
+const stepColorMap: Record<string, string> = {
+  impresion: "text-blue-600",
+  laminado: "text-purple-600",
+  impresion_2: "text-blue-600",
+  foil: "text-pink-600",
+  corte: "text-orange-600",
+  acabados: "text-teal-600",
 }
 
 function formatMinutos(min: number): string {
@@ -85,33 +68,40 @@ function formatFecha(iso: string): string {
   })
 }
 
-function EtapaBadge({ resultado }: { resultado: EtapaResultado | null }) {
-  if (!resultado) {
+function calcRealTime(step: ProcessStep): number | null {
+  if (!step.inicio || !step.fin) return null
+  return (new Date(step.fin).getTime() - new Date(step.inicio).getTime()) / 60000
+}
+
+function EtapaBadge({ step }: { step: ProcessStep }) {
+  if (step.estado === "pendiente" || step.estado === "no_aplica") {
     return (
       <Badge variant="outline" className="text-xs border-muted-foreground/30 text-muted-foreground">
         N/A
       </Badge>
     )
   }
-  if (!resultado.completada) {
+  if (step.estado === "en_progreso") {
     return (
       <Badge variant="outline" className="text-xs border-muted-foreground/30 text-muted-foreground">
         En progreso
       </Badge>
     )
   }
-  if (resultado.aTiempo) {
+  const real = calcRealTime(step)
+  if (real === null) return null
+  const est = step.tiempoEstimado ?? 0
+  const onTime = real <= est
+  if (onTime) {
     return (
-      <Badge className="text-xs bg-emerald-100 text-emerald-700 border-emerald-200 hover:bg-emerald-100">
-        <CheckCircle2 className="size-3 mr-1" />
-        A tiempo
+      <Badge className="text-xs bg-green-100 text-green-700 border-green-200 hover:bg-green-100">
+        <CheckCircle2 className="size-3 mr-1" />A tiempo
       </Badge>
     )
   }
   return (
     <Badge className="text-xs bg-red-100 text-red-700 border-red-200 hover:bg-red-100">
-      <XCircle className="size-3 mr-1" />
-      Excedido
+      <XCircle className="size-3 mr-1" />Excedido
     </Badge>
   )
 }
@@ -136,9 +126,7 @@ function ResumenCard({
           <div className="flex flex-col gap-1">
             <p className="text-sm text-muted-foreground">{titulo}</p>
             <p className="text-2xl font-bold text-foreground">{valor}</p>
-            {subtitulo && (
-              <p className="text-xs text-muted-foreground">{subtitulo}</p>
-            )}
+            {subtitulo && <p className="text-xs text-muted-foreground">{subtitulo}</p>}
           </div>
           <div className={cn("flex size-10 shrink-0 items-center justify-center rounded-lg", colorClass)}>
             <Icon className="size-5 text-white" />
@@ -150,12 +138,11 @@ function ResumenCard({
 }
 
 function TicketReporteCard({ ticket }: { ticket: Ticket }) {
-  const impresion = calcularEtapaImpresion(ticket)
-  const laminado = calcularEtapaLaminado(ticket)
+  const steps = getTicketProcessSteps(ticket)
+  const completedSteps = steps.filter((s) => s.estado === "completado")
 
   return (
     <Card className="py-0 overflow-hidden">
-      {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 bg-muted/50 border-b">
         <div className="flex items-center gap-2">
           <span className="font-bold font-mono text-foreground">#{ticket.ticketPOS}</span>
@@ -163,78 +150,58 @@ function TicketReporteCard({ ticket }: { ticket: Ticket }) {
             <span className="text-sm text-muted-foreground">- {ticket.cliente}</span>
           )}
         </div>
-        <span className="text-xs text-muted-foreground">{formatFecha(ticket.creadoEn)}</span>
+        <div className="flex items-center gap-2">
+          <Badge variant="outline" className="text-[10px]">
+            {tipoServicioLabel(ticket.tipoServicio)}
+          </Badge>
+          <span className="text-xs text-muted-foreground">{formatFecha(ticket.creadoEn)}</span>
+        </div>
       </div>
 
       <CardContent className="p-4">
-        <div className={cn("grid grid-cols-1 gap-4", impresion && laminado ? "sm:grid-cols-2" : "")}>
-          {/* Impresion */}
-          {impresion && (
-            <div className="flex flex-col gap-2 rounded-lg border p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Printer className="size-4 text-amber-600" />
-                  <span className="text-sm font-semibold text-foreground">Impresion</span>
-                </div>
-                <EtapaBadge resultado={impresion} />
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <Clock className="size-3.5" />
-                  <span>Estimado: {formatMinutos(impresion.tiempoEstimado)}</span>
-                </div>
-                {impresion.completada && (
-                  <div className={cn(
-                    "flex items-center gap-1 font-medium",
-                    impresion.aTiempo ? "text-emerald-600" : "text-red-600"
-                  )}>
-                    <Clock className="size-3.5" />
-                    <span>Real: {formatMinutos(impresion.tiempoReal)}</span>
-                  </div>
-                )}
-              </div>
-              {ticket.realizadoPorImpresion && (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground border-t pt-2 mt-1">
-                  <UserCircle className="size-3.5 shrink-0" />
-                  <span className="font-medium text-foreground">{ticket.realizadoPorImpresion}</span>
-                </div>
-              )}
-            </div>
-          )}
+        <div className={cn("grid grid-cols-1 gap-3", completedSteps.length > 1 ? "sm:grid-cols-2" : "")}>
+          {steps.map((step) => {
+            const Icon = stepIconMap[step.key] || Clock
+            const color = stepColorMap[step.key] || "text-muted-foreground"
+            const realTime = calcRealTime(step)
 
-          {/* Laminado */}
-          {laminado && (
-            <div className="flex flex-col gap-2 rounded-lg border p-3">
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-1.5">
-                  <Layers className="size-4 text-violet-600" />
-                  <span className="text-sm font-semibold text-foreground">Laminado</span>
+            return (
+              <div key={step.key} className="flex flex-col gap-2 rounded-lg border p-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <Icon className={cn("size-4", color)} />
+                    <span className="text-sm font-semibold text-foreground">{step.label}</span>
+                  </div>
+                  <EtapaBadge step={step} />
                 </div>
-                <EtapaBadge resultado={laminado} />
-              </div>
-              <div className="flex items-center gap-3 text-sm">
-                <div className="flex items-center gap-1 text-muted-foreground">
-                  <Clock className="size-3.5" />
-                  <span>Estimado: {formatMinutos(laminado.tiempoEstimado)}</span>
-                </div>
-                {laminado.completada && (
-                  <div className={cn(
-                    "flex items-center gap-1 font-medium",
-                    laminado.aTiempo ? "text-emerald-600" : "text-red-600"
-                  )}>
+                <div className="flex items-center gap-3 text-sm">
+                  <div className="flex items-center gap-1 text-muted-foreground">
                     <Clock className="size-3.5" />
-                    <span>Real: {formatMinutos(laminado.tiempoReal)}</span>
+                    <span>Est: {formatMinutos(step.tiempoEstimado ?? 0)}</span>
+                  </div>
+                  {realTime !== null && (
+                    <div
+                      className={cn(
+                        "flex items-center gap-1 font-medium",
+                        realTime <= (step.tiempoEstimado ?? 0)
+                          ? "text-green-600"
+                          : "text-red-600"
+                      )}
+                    >
+                      <Clock className="size-3.5" />
+                      <span>Real: {formatMinutos(realTime)}</span>
+                    </div>
+                  )}
+                </div>
+                {step.realizadoPor && (
+                  <div className="flex items-center gap-1.5 text-sm text-muted-foreground border-t pt-2 mt-1">
+                    <UserCircle className="size-3.5 shrink-0" />
+                    <span className="font-medium text-foreground">{step.realizadoPor}</span>
                   </div>
                 )}
               </div>
-              {ticket.realizadoPorLaminado && (
-                <div className="flex items-center gap-1.5 text-sm text-muted-foreground border-t pt-2 mt-1">
-                  <UserCircle className="size-3.5 shrink-0" />
-                  <span className="font-medium text-foreground">{ticket.realizadoPorLaminado}</span>
-                </div>
-              )}
-            </div>
-          )}
+            )
+          })}
         </div>
       </CardContent>
     </Card>
@@ -246,75 +213,75 @@ export default function ReportesPage() {
   const [filtro, setFiltro] = useState<FiltroReporte>("todos")
 
   const analisis = useMemo(() => {
-    // Only analyze tickets that have completed at least one stage
-    const ticketsConDatos = allTickets.filter(
-      (t) => t.finImpresion || t.finLaminado
-    )
-
-    const resultados = ticketsConDatos.map((ticket) => {
-      const impresion = calcularEtapaImpresion(ticket)
-      const laminado = calcularEtapaLaminado(ticket)
-      const impresionOk = impresion ? impresion.completada && impresion.aTiempo : true
-      const laminadoOk = laminado ? laminado.completada && laminado.aTiempo : true
-      // "all stages complete" means all applicable stages are done
-      const allApplicableComplete =
-        (impresion === null || impresion.completada) &&
-        (laminado === null || laminado.completada)
-      const todoATiempo = allApplicableComplete && impresionOk && laminadoOk
-      const tieneFallo =
-        (impresion?.completada && !impresion.aTiempo) ||
-        (laminado?.completada && !laminado.aTiempo)
-
-      return { ticket, impresion, laminado, impresionOk, laminadoOk, ambosCompletos: allApplicableComplete, todoATiempo, tieneFallo }
+    const ticketsConDatos = allTickets.filter((t) => {
+      const steps = getTicketProcessSteps(t)
+      return steps.some((s) => s.estado === "completado")
     })
 
-    const totalConDatos = resultados.length
-    const impresionesCompletadas = resultados.filter((r) => r.impresion?.completada)
-    const laminadosCompletados = resultados.filter((r) => r.laminado?.completada)
-    const impresionesATiempo = impresionesCompletadas.filter((r) => r.impresionOk).length
-    const laminadosATiempo = laminadosCompletados.filter((r) => r.laminadoOk).length
-    const ambosCompletos = resultados.filter((r) => r.ambosCompletos)
-    const todoATiempoCount = ambosCompletos.filter((r) => r.todoATiempo).length
+    let totalStepsCompleted = 0
+    let totalStepsOnTime = 0
+
+    const resultados = ticketsConDatos.map((ticket) => {
+      const steps = getTicketProcessSteps(ticket)
+      const completedSteps = steps.filter((s) => s.estado === "completado")
+      let allOnTime = true
+
+      for (const step of completedSteps) {
+        totalStepsCompleted++
+        const real = calcRealTime(step)
+        if (real !== null && real <= (step.tiempoEstimado ?? 0)) {
+          totalStepsOnTime++
+        } else if (real !== null) {
+          allOnTime = false
+        }
+      }
+
+      const allDone = steps.every((s) => s.estado === "completado")
+      const hasFail = completedSteps.some((s) => {
+        const real = calcRealTime(s)
+        return real !== null && real > (s.tiempoEstimado ?? 0)
+      })
+
+      return { ticket, allOnTime: allDone && allOnTime, hasFail, allDone }
+    })
+
+    const completedTickets = resultados.filter((r) => r.allDone)
+    const perfectTickets = completedTickets.filter((r) => r.allOnTime)
 
     return {
       resultados,
-      totalConDatos,
-      impresionesCompletadas: impresionesCompletadas.length,
-      laminadosCompletados: laminadosCompletados.length,
-      impresionesATiempo,
-      laminadosATiempo,
-      ambosCompletosCount: ambosCompletos.length,
-      todoATiempoCount,
+      totalConDatos: ticketsConDatos.length,
+      totalStepsCompleted,
+      totalStepsOnTime,
+      completedTickets: completedTickets.length,
+      perfectTickets: perfectTickets.length,
     }
   }, [allTickets])
 
   const ticketsFiltrados = useMemo(() => {
     switch (filtro) {
       case "a_tiempo":
-        return analisis.resultados.filter((r) => r.todoATiempo)
+        return analisis.resultados.filter((r) => r.allOnTime)
       case "con_fallos":
-        return analisis.resultados.filter((r) => r.tieneFallo)
+        return analisis.resultados.filter((r) => r.hasFail)
       default:
         return analisis.resultados
     }
   }, [filtro, analisis.resultados])
 
-  const pctImpresion = analisis.impresionesCompletadas > 0
-    ? Math.round((analisis.impresionesATiempo / analisis.impresionesCompletadas) * 100)
-    : 0
+  const pctSteps =
+    analisis.totalStepsCompleted > 0
+      ? Math.round((analisis.totalStepsOnTime / analisis.totalStepsCompleted) * 100)
+      : 0
 
-  const pctLaminado = analisis.laminadosCompletados > 0
-    ? Math.round((analisis.laminadosATiempo / analisis.laminadosCompletados) * 100)
-    : 0
-
-  const pctGlobal = analisis.ambosCompletosCount > 0
-    ? Math.round((analisis.todoATiempoCount / analisis.ambosCompletosCount) * 100)
-    : 0
+  const pctGlobal =
+    analisis.completedTickets > 0
+      ? Math.round((analisis.perfectTickets / analisis.completedTickets) * 100)
+      : 0
 
   return (
     <div className="flex min-h-svh flex-col bg-background">
-      {/* Header */}
-      <header className="sticky top-0 z-10 border-b bg-blue-50 px-4 py-3">
+      <header className="sticky top-0 z-10 border-b bg-indigo-50 px-4 py-3">
         <div className="mx-auto flex max-w-3xl items-center gap-3">
           <Link href="/">
             <Button variant="ghost" size="icon" className="size-9">
@@ -323,7 +290,7 @@ export default function ReportesPage() {
             </Button>
           </Link>
           <div className="flex items-center gap-2">
-            <BarChart3 className="size-5 text-blue-600" />
+            <BarChart3 className="size-5 text-indigo-600" />
             <h1 className="text-xl font-bold text-foreground">Reportes</h1>
           </div>
         </div>
@@ -331,34 +298,27 @@ export default function ReportesPage() {
 
       <main className="mx-auto flex w-full max-w-3xl flex-1 flex-col gap-6 p-4">
         {/* Summary cards */}
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
           <ResumenCard
             titulo="Total tickets"
             valor={analisis.totalConDatos}
             subtitulo="con datos"
             icon={BarChart3}
+            colorClass="bg-indigo-500"
+          />
+          <ResumenCard
+            titulo="Etapas a tiempo"
+            valor={`${pctSteps}%`}
+            subtitulo={`${analisis.totalStepsOnTime}/${analisis.totalStepsCompleted} pasos`}
+            icon={Clock}
             colorClass="bg-blue-500"
-          />
-          <ResumenCard
-            titulo="Impresion"
-            valor={`${pctImpresion}%`}
-            subtitulo={`${analisis.impresionesATiempo}/${analisis.impresionesCompletadas} a tiempo`}
-            icon={Printer}
-            colorClass="bg-amber-500"
-          />
-          <ResumenCard
-            titulo="Laminado"
-            valor={`${pctLaminado}%`}
-            subtitulo={`${analisis.laminadosATiempo}/${analisis.laminadosCompletados} a tiempo`}
-            icon={Layers}
-            colorClass="bg-violet-500"
           />
           <ResumenCard
             titulo="Exito global"
             valor={`${pctGlobal}%`}
-            subtitulo={`${analisis.todoATiempoCount}/${analisis.ambosCompletosCount} perfectos`}
+            subtitulo={`${analisis.perfectTickets}/${analisis.completedTickets} perfectos`}
             icon={TrendingUp}
-            colorClass={pctGlobal >= 70 ? "bg-emerald-500" : pctGlobal >= 40 ? "bg-amber-500" : "bg-red-500"}
+            colorClass={pctGlobal >= 70 ? "bg-green-500" : pctGlobal >= 40 ? "bg-amber-500" : "bg-red-500"}
           />
         </div>
 
@@ -379,8 +339,8 @@ export default function ReportesPage() {
                 onClick={() => setFiltro(key)}
                 className={cn(
                   "text-xs",
-                  filtro === key && key === "a_tiempo" && "bg-emerald-600 hover:bg-emerald-700 text-white",
-                  filtro === key && key === "con_fallos" && "bg-red-600 hover:bg-red-700 text-white",
+                  filtro === key && key === "a_tiempo" && "bg-green-600 hover:bg-green-700 text-white",
+                  filtro === key && key === "con_fallos" && "bg-red-600 hover:bg-red-700 text-white"
                 )}
               >
                 {label}

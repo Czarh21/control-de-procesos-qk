@@ -1,6 +1,13 @@
 "use client"
 
-import { type Ticket, type TicketEstado, tipoServicioLabel } from "@/lib/tickets"
+import {
+  type Ticket,
+  tipoServicioLabel,
+  estadoLabel,
+  estadoColor,
+  getCurrentStepInfo,
+  getTicketProcessSteps,
+} from "@/lib/tickets"
 import { useElapsedTime, isOverdue } from "@/hooks/use-tickets"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -8,163 +15,161 @@ import { cn } from "@/lib/utils"
 import {
   Clock,
   User,
-  UserCircle,
   FileText,
   AlertTriangle,
   Timer,
-  Printer,
-  Layers,
+  CheckCircle2,
+  Circle,
+  Loader2,
 } from "lucide-react"
-
-const estadoConfig: Record<
-  TicketEstado,
-  {
-    label: string
-    borderColor: string
-    bgColor: string
-    badgeBg: string
-    badgeText: string
-    timerField: "inicioImpresion" | "inicioLaminado" | undefined
-    estimateField: "tiempoImpresion" | "tiempoLaminado" | undefined
-  }
-> = {
-  en_impresion: {
-    label: "En Impresion",
-    borderColor: "border-amber-400",
-    bgColor: "bg-amber-50",
-    badgeBg: "bg-amber-500",
-    badgeText: "text-white",
-    timerField: "inicioImpresion",
-    estimateField: "tiempoImpresion",
-  },
-  listo_para_laminado: {
-    label: "Listo para Laminado",
-    borderColor: "border-sky-400",
-    bgColor: "bg-sky-50",
-    badgeBg: "bg-sky-500",
-    badgeText: "text-white",
-    timerField: "finImpresion",
-    estimateField: undefined,
-  },
-  en_laminado: {
-    label: "En Laminado",
-    borderColor: "border-violet-400",
-    bgColor: "bg-violet-50",
-    badgeBg: "bg-violet-500",
-    badgeText: "text-white",
-    timerField: "inicioLaminado",
-    estimateField: "tiempoLaminado",
-  },
-  terminado: {
-    label: "Terminado",
-    borderColor: "border-emerald-400",
-    bgColor: "bg-emerald-50",
-    badgeBg: "bg-emerald-500",
-    badgeText: "text-white",
-    timerField: undefined,
-    estimateField: undefined,
-  },
-}
 
 interface TicketCardProps {
   ticket: Ticket
   actions?: React.ReactNode
+  showProcessSteps?: boolean
 }
 
-export function TicketCard({ ticket, actions }: TicketCardProps) {
-  const config = estadoConfig[ticket.estado]
-  const timerStart = config.timerField ? ticket[config.timerField] : undefined
-  const elapsed = useElapsedTime(timerStart)
-  const estimateField = config.estimateField
-  const estimateMinutes = estimateField ? (ticket[estimateField] ?? 0) : 0
+export function TicketCard({
+  ticket,
+  actions,
+  showProcessSteps = false,
+}: TicketCardProps) {
+  const stepInfo = getCurrentStepInfo(ticket)
+  const elapsed = useElapsedTime(stepInfo.startTime)
   const overdue =
-    config.timerField && config.estimateField
-      ? isOverdue(ticket[config.timerField], ticket[config.estimateField] ?? 0)
+    stepInfo.startTime && stepInfo.estimatedMinutes
+      ? isOverdue(stepInfo.startTime, stepInfo.estimatedMinutes)
       : false
 
-  // For "listo_para_laminado", show waiting time
-  const waitingElapsed = useElapsedTime(
-    ticket.estado === "listo_para_laminado" ? ticket.finImpresion : undefined
-  )
+  // For "listo_para_*" states, show waiting time
+  const isWaiting = ticket.estado.startsWith("listo_para_")
+  const waitStartMap: Record<string, string | undefined> = {
+    listo_para_laminado: ticket.finImpresion,
+    listo_para_impresion_2: ticket.finLaminado,
+    listo_para_foil: ticket.finImpresion2,
+    listo_para_corte: ticket.finFoil || ticket.finLaminado,
+    listo_para_acabados:
+      ticket.finCorte || ticket.finFoil || ticket.finLaminado || ticket.finImpresion,
+  }
+  const waitStart = isWaiting ? waitStartMap[ticket.estado] : undefined
+  const waitElapsed = useElapsedTime(waitStart)
+
+  const borderColorMap: Record<string, string> = {
+    en_impresion: "border-blue-400",
+    en_impresion_2: "border-blue-400",
+    listo_para_laminado: "border-amber-400",
+    listo_para_impresion_2: "border-amber-400",
+    listo_para_foil: "border-amber-400",
+    listo_para_corte: "border-amber-400",
+    listo_para_acabados: "border-amber-400",
+    en_laminado: "border-purple-400",
+    en_foil: "border-purple-400",
+    en_corte: "border-orange-400",
+    en_acabados: "border-teal-400",
+    terminado: "border-green-400",
+  }
+
+  const bgColorMap: Record<string, string> = {
+    en_impresion: "bg-blue-50",
+    en_impresion_2: "bg-blue-50",
+    listo_para_laminado: "bg-amber-50",
+    listo_para_impresion_2: "bg-amber-50",
+    listo_para_foil: "bg-amber-50",
+    listo_para_corte: "bg-amber-50",
+    listo_para_acabados: "bg-amber-50",
+    en_laminado: "bg-purple-50",
+    en_foil: "bg-purple-50",
+    en_corte: "bg-orange-50",
+    en_acabados: "bg-teal-50",
+    terminado: "bg-green-50",
+  }
+
+  const processSteps = showProcessSteps ? getTicketProcessSteps(ticket) : []
 
   return (
     <Card
       className={cn(
         "border-l-4 py-4 gap-3 transition-all",
-        config.borderColor,
-        config.bgColor,
+        borderColorMap[ticket.estado] || "border-muted",
+        bgColorMap[ticket.estado] || "bg-background",
         overdue && "ring-2 ring-red-400 animate-pulse"
       )}
     >
       <CardContent className="flex flex-col gap-3">
-        {/* Header row */}
+        {/* Header */}
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="text-lg font-bold text-foreground font-mono">
               #{ticket.ticketPOS}
             </span>
-            <Badge
-              className={cn(
-                "text-xs border-none",
-                config.badgeBg,
-                config.badgeText
-              )}
-            >
-              {config.label}
+            <Badge className={cn("text-xs border-none", estadoColor(ticket.estado))}>
+              {estadoLabel(ticket.estado)}
             </Badge>
           </div>
-          {ticket.cliente && (
-            <span className="flex items-center gap-1 text-sm font-medium text-foreground">
-              <UserCircle className="size-4 text-muted-foreground" />
-              {ticket.cliente}
-            </span>
-          )}
-          {overdue && (
-            <AlertTriangle className="size-5 text-red-500" />
+          <div className="flex items-center gap-2">
+            {ticket.cliente && (
+              <span className="text-sm font-medium text-foreground">{ticket.cliente}</span>
+            )}
+            {overdue && <AlertTriangle className="size-5 text-red-500" />}
+          </div>
+        </div>
+
+        {/* Service type */}
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-semibold text-muted-foreground">
+            {tipoServicioLabel(ticket.tipoServicio)}
+          </span>
+          {ticket.conAcabados && (
+            <Badge variant="outline" className="text-[10px] px-1.5 py-0">
+              + Acabados
+            </Badge>
           )}
         </div>
 
-        {/* Service type indicator */}
-        {ticket.tipoServicio !== "ambos" && (
-          <div className="flex items-center gap-1.5">
-            {ticket.tipoServicio === "solo_impresion" ? (
-              <Printer className="size-3.5 text-amber-600" />
-            ) : (
-              <Layers className="size-3.5 text-violet-600" />
-            )}
-            <span className={cn(
-              "text-xs font-semibold",
-              ticket.tipoServicio === "solo_impresion" ? "text-amber-600" : "text-violet-600"
-            )}>
-              {tipoServicioLabel(ticket.tipoServicio)}
-            </span>
+        {/* Process steps mini-bar */}
+        {showProcessSteps && processSteps.length > 0 && (
+          <div className="flex items-center gap-1.5 flex-wrap">
+            {processSteps.map((step, i) => (
+              <div key={i} className="flex items-center gap-1">
+                {step.estado === "completado" && (
+                  <CheckCircle2 className="size-3.5 text-green-600" />
+                )}
+                {step.estado === "en_progreso" && (
+                  <Loader2 className="size-3.5 text-primary animate-spin" />
+                )}
+                {step.estado === "pendiente" && (
+                  <Circle className="size-3.5 text-muted-foreground" />
+                )}
+                <span
+                  className={cn(
+                    "text-[11px] font-medium",
+                    step.estado === "completado" && "text-green-700",
+                    step.estado === "en_progreso" && "text-primary font-bold",
+                    step.estado === "pendiente" && "text-muted-foreground"
+                  )}
+                >
+                  {step.label}
+                </span>
+                {i < processSteps.length - 1 && (
+                  <span className="text-muted-foreground mx-0.5">{">"}</span>
+                )}
+              </div>
+            ))}
           </div>
         )}
 
         {/* Info row */}
         <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-muted-foreground">
-          {ticket.tiempoImpresion != null && (
+          {stepInfo.estimatedMinutes != null && stepInfo.estimatedMinutes > 0 && (
             <span className="flex items-center gap-1">
               <Clock className="size-3.5" />
-              Imp: {ticket.tiempoImpresion}min
-            </span>
-          )}
-          {ticket.tiempoLaminado != null && (
-            <span className="flex items-center gap-1">
-              <Clock className="size-3.5" />
-              Lam: {ticket.tiempoLaminado}min
+              {stepInfo.stepLabel}: {stepInfo.estimatedMinutes}min
             </span>
           )}
           {ticket.realizadoPorImpresion && (
             <span className="flex items-center gap-1">
               <User className="size-3.5" />
               {ticket.realizadoPorImpresion}
-            </span>
-          )}
-          {ticket.realizadoPorLaminado && (
-            <span className="flex items-center gap-1">
-              <User className="size-3.5" />
-              Lam: {ticket.realizadoPorLaminado}
             </span>
           )}
           {ticket.notas && (
@@ -184,9 +189,9 @@ export function TicketCard({ ticket, actions }: TicketCardProps) {
                 overdue ? "text-red-500" : "text-muted-foreground"
               )}
             />
-            {ticket.estado === "listo_para_laminado" ? (
-              <span className="font-mono text-base text-sky-700">
-                Esperando: {waitingElapsed}
+            {isWaiting ? (
+              <span className="font-mono text-base text-amber-700">
+                Esperando: {waitElapsed}
               </span>
             ) : (
               <span
@@ -196,10 +201,9 @@ export function TicketCard({ ticket, actions }: TicketCardProps) {
                 )}
               >
                 {elapsed}
-                {estimateMinutes > 0 && (
+                {stepInfo.estimatedMinutes != null && stepInfo.estimatedMinutes > 0 && (
                   <span className="text-muted-foreground text-sm">
-                    {" "}
-                    / {estimateMinutes}min
+                    {" "}/ {stepInfo.estimatedMinutes}min
                   </span>
                 )}
               </span>
@@ -207,12 +211,17 @@ export function TicketCard({ ticket, actions }: TicketCardProps) {
           </div>
         )}
 
-        {/* Completed info for finished tickets */}
-        {ticket.estado === "terminado" && (ticket.finLaminado || ticket.finImpresion) && (
-          <div className="text-sm text-emerald-700 font-medium">
+        {/* Completed info */}
+        {ticket.estado === "terminado" && (
+          <div className="text-sm text-green-700 font-medium">
             Completado:{" "}
             {new Date(
-              (ticket.finLaminado || ticket.finImpresion)!
+              ticket.finAcabados ||
+                ticket.finCorte ||
+                ticket.finFoil ||
+                ticket.finLaminado ||
+                ticket.finImpresion ||
+                ticket.creadoEn
             ).toLocaleTimeString("es-MX", {
               hour: "2-digit",
               minute: "2-digit",
