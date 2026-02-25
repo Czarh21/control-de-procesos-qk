@@ -298,6 +298,9 @@ export default function ReportesPage() {
     let totalStepsCompleted = 0
     let totalStepsOnTime = 0
 
+    // Per-stage aggregate
+    const stageMap: Record<string, { total: number; onTime: number; totalReal: number; totalEst: number }> = {}
+
     const resultados = ticketsConDatos.map((ticket) => {
       const steps = getTicketProcessSteps(ticket)
       const completedSteps = steps.filter((s) => s.estado === "completado")
@@ -306,10 +309,21 @@ export default function ReportesPage() {
       for (const step of completedSteps) {
         totalStepsCompleted++
         const real = calcRealTime(step)
-        if (real !== null && real <= (step.tiempoEstimado ?? 0)) {
-          totalStepsOnTime++
-        } else if (real !== null) {
-          allOnTime = false
+
+        if (!stageMap[step.key]) {
+          stageMap[step.key] = { total: 0, onTime: 0, totalReal: 0, totalEst: 0 }
+        }
+        stageMap[step.key].total++
+
+        if (real !== null) {
+          stageMap[step.key].totalReal += real
+          stageMap[step.key].totalEst += step.tiempoEstimado ?? 0
+          if (real <= (step.tiempoEstimado ?? 0)) {
+            totalStepsOnTime++
+            stageMap[step.key].onTime++
+          } else {
+            allOnTime = false
+          }
         }
       }
 
@@ -325,6 +339,33 @@ export default function ReportesPage() {
     const completedTickets = resultados.filter((r) => r.allDone)
     const perfectTickets = completedTickets.filter((r) => r.allOnTime)
 
+    // Ordered stage keys
+    const stageOrder = ["impresion", "laminado", "impresion_2", "foil", "corte", "acabados"]
+    const stageLabels: Record<string, string> = {
+      impresion: "Impresion",
+      laminado: "Laminado",
+      impresion_2: "2da Impresion",
+      foil: "Foil",
+      corte: "Corte",
+      acabados: "Acabados",
+    }
+    const stageStats = stageOrder
+      .filter((key) => stageMap[key] && stageMap[key].total > 0)
+      .map((key) => ({
+        key,
+        label: stageLabels[key] || key,
+        ...stageMap[key],
+        pctOnTime: stageMap[key].total > 0
+          ? Math.round((stageMap[key].onTime / stageMap[key].total) * 100)
+          : 0,
+        avgReal: stageMap[key].total > 0
+          ? stageMap[key].totalReal / stageMap[key].total
+          : 0,
+        avgEst: stageMap[key].total > 0
+          ? stageMap[key].totalEst / stageMap[key].total
+          : 0,
+      }))
+
     return {
       resultados,
       totalConDatos: ticketsConDatos.length,
@@ -332,6 +373,7 @@ export default function ReportesPage() {
       totalStepsOnTime,
       completedTickets: completedTickets.length,
       perfectTickets: perfectTickets.length,
+      stageStats,
     }
   }, [ticketsPorFecha])
 
@@ -522,6 +564,76 @@ export default function ReportesPage() {
             colorClass={pctGlobal >= 70 ? "bg-green-500" : pctGlobal >= 40 ? "bg-amber-500" : "bg-red-500"}
           />
         </div>
+
+        {/* Per-stage breakdown */}
+        {analisis.stageStats.length > 0 && (
+          <Card className="py-0 overflow-hidden">
+            <div className="flex items-center gap-2 px-4 py-3 bg-muted/50 border-b">
+              <TrendingUp className="size-4 text-indigo-600" />
+              <h2 className="text-sm font-semibold text-foreground">Desglose por Etapa</h2>
+            </div>
+            <CardContent className="p-4">
+              <div className="flex flex-col gap-3">
+                {analisis.stageStats.map((stage) => {
+                  const Icon = stepIconMap[stage.key] || Clock
+                  const color = stepColorMap[stage.key] || "text-muted-foreground"
+                  const barColor =
+                    stage.pctOnTime >= 80
+                      ? "bg-green-500"
+                      : stage.pctOnTime >= 50
+                        ? "bg-amber-500"
+                        : "bg-red-500"
+                  const badgeColor =
+                    stage.pctOnTime >= 80
+                      ? "bg-green-100 text-green-700 border-green-200"
+                      : stage.pctOnTime >= 50
+                        ? "bg-amber-100 text-amber-700 border-amber-200"
+                        : "bg-red-100 text-red-700 border-red-200"
+
+                  return (
+                    <div key={stage.key} className="rounded-lg border p-3">
+                      <div className="flex items-center justify-between mb-2">
+                        <div className="flex items-center gap-2">
+                          <Icon className={cn("size-4", color)} />
+                          <span className="text-sm font-semibold text-foreground">{stage.label}</span>
+                          <span className="text-xs text-muted-foreground">({stage.total} completados)</span>
+                        </div>
+                        <Badge className={cn("text-xs", badgeColor, "hover:opacity-90")}>
+                          {stage.pctOnTime}% a tiempo
+                        </Badge>
+                      </div>
+                      {/* Progress bar */}
+                      <div className="h-2 w-full rounded-full bg-muted mb-2">
+                        <div
+                          className={cn("h-full rounded-full transition-all", barColor)}
+                          style={{ width: `${stage.pctOnTime}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between text-xs text-muted-foreground">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1">
+                            <CheckCircle2 className="size-3 text-green-600" />
+                            {stage.onTime} a tiempo
+                          </span>
+                          <span className="flex items-center gap-1">
+                            <XCircle className="size-3 text-red-600" />
+                            {stage.total - stage.onTime} excedidos
+                          </span>
+                        </div>
+                        <div className="flex items-center gap-3">
+                          <span>Prom. est: {formatMinutos(stage.avgEst)}</span>
+                          <span className={cn("font-medium", stage.avgReal > stage.avgEst ? "text-red-600" : "text-green-600")}>
+                            Prom. real: {formatMinutos(stage.avgReal)}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  )
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        )}
 
         {/* Status filters */}
         <div className="flex items-center gap-2">
