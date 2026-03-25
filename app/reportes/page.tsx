@@ -1,8 +1,10 @@
 "use client"
 
-import { useState, useMemo } from "react"
+import { useState, useMemo, useEffect } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useTickets } from "@/hooks/use-tickets"
+import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent } from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
@@ -31,6 +33,7 @@ import {
   Star,
   CalendarDays,
   X,
+  LogOut,
 } from "lucide-react"
 
 type FiltroReporte = "todos" | "a_tiempo" | "con_fallos"
@@ -258,6 +261,23 @@ export default function ReportesPage() {
   const [filtroFecha, setFiltroFecha] = useState<FiltroFecha>(null)
   const [fechaDesde, setFechaDesde] = useState("")
   const [fechaHasta, setFechaHasta] = useState("")
+  const [userEmail, setUserEmail] = useState<string | null>(null)
+  const [isLoggingOut, setIsLoggingOut] = useState(false)
+  const router = useRouter()
+
+  useEffect(() => {
+    const supabase = createClient()
+    supabase.auth.getUser().then(({ data: { user } }) => {
+      setUserEmail(user?.email ?? null)
+    })
+  }, [])
+
+  const handleLogout = async () => {
+    setIsLoggingOut(true)
+    const supabase = createClient()
+    await supabase.auth.signOut()
+    router.push("/")
+  }
 
   // Filter tickets by date first
   const ticketsPorFecha = useMemo(() => {
@@ -439,16 +459,35 @@ export default function ReportesPage() {
   return (
     <div className="flex min-h-svh flex-col bg-background">
       <header className="sticky top-0 z-10 border-b bg-indigo-50 px-4 py-3">
-        <div className="mx-auto flex max-w-3xl items-center gap-3">
-          <Link href="/">
-            <Button variant="ghost" size="icon" className="size-9">
-              <ArrowLeft className="size-4" />
-              <span className="sr-only">Volver al inicio</span>
+        <div className="mx-auto flex max-w-3xl items-center justify-between gap-3">
+          <div className="flex items-center gap-3">
+            <Link href="/">
+              <Button variant="ghost" size="icon" className="size-9">
+                <ArrowLeft className="size-4" />
+                <span className="sr-only">Volver al inicio</span>
+              </Button>
+            </Link>
+            <div className="flex items-center gap-2">
+              <BarChart3 className="size-5 text-indigo-600" />
+              <h1 className="text-xl font-bold text-foreground">Reportes</h1>
+            </div>
+          </div>
+          <div className="flex items-center gap-3">
+            {userEmail && (
+              <span className="hidden sm:block text-sm text-muted-foreground truncate max-w-[150px]">
+                {userEmail}
+              </span>
+            )}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleLogout}
+              disabled={isLoggingOut}
+              className="gap-1.5 text-xs"
+            >
+              <LogOut className="size-3.5" />
+              <span className="hidden sm:inline">{isLoggingOut ? "Saliendo..." : "Cerrar sesion"}</span>
             </Button>
-          </Link>
-          <div className="flex items-center gap-2">
-            <BarChart3 className="size-5 text-indigo-600" />
-            <h1 className="text-xl font-bold text-foreground">Reportes</h1>
           </div>
         </div>
       </header>
